@@ -67,7 +67,11 @@ def tensor(x:Any, *rest)->Tensor:
     if len(rest): x = (x,)+rest
     # XXX: Pytorch bug in dataloader using num_workers>0; TODO: create repro and report
     if is_listy(x) and len(x)==0: return tensor(0)
-    return torch.tensor(x) if is_listy(x) else as_tensor(x)
+    res = torch.tensor(x) if is_listy(x) else as_tensor(x)
+    if res.dtype is torch.int32:
+        warn('Tensor is int32: upgrading to int64; for better performance use int64 input')
+        return res.long()
+    return res
 
 def np_address(x:np.ndarray)->int:
     "Address of `x` in memory."
@@ -76,7 +80,9 @@ def np_address(x:np.ndarray)->int:
 def to_detach(b:Tensors, cpu:bool=True):
     "Recursively detach lists of tensors in `b `; put them on the CPU if `cpu=True`."
     if is_listy(b): return [to_detach(o, cpu) for o in b]
-    return (b.detach().cpu() if cpu else b.detach()) if isinstance(b,Tensor) else b
+    if not isinstance(b,Tensor): return b
+    b = b.detach()
+    return b.cpu() if cpu else b
 
 def to_data(b:ItemsList):
     "Recursively map lists of items in `b ` to their wrapped data."
@@ -168,8 +174,8 @@ def set_bn_eval(m:nn.Module)->None:
         set_bn_eval(l)
 
 def to_half(b:Collection[Tensor])->Collection[Tensor]:
-    "Set the input of batch `b` to half precision."
-    return [b[0].half(), b[1]]
+    "Set the input of batch `b` to half precision if isn't an int type."
+    return [b[0].half(), b[1]] if b[0].dtype != torch.int64 else b
 
 def bn2float(module:nn.Module)->nn.Module:
     "If `module` is batchnorm don't use half precision."
@@ -295,4 +301,12 @@ def uniform_int(low:int, high:int, size:Optional[List[int]]=None)->IntOrTensor:
 def one_param(m: nn.Module)->Tensor: 
     "Return the first parameter of `m`."
     return next(m.parameters())
+
+def try_int(o:Any)->Any:
+    "Try to convert `o` to int, default to `o` if not possible."
+    # NB: single-item rank-1 array/tensor can be converted to int, but we don't want to do this
+    if isinstance(o, (np.ndarray,Tensor)): return o if o.ndim else int(o)
+    if isinstance(o, collections.Sized) or getattr(o,'__array_interface__',False): return o
+    try: return int(o)
+    except: return o
 

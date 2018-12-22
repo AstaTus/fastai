@@ -87,12 +87,12 @@ class TabularDataBunch(DataBunch):
                 cat_names:OptStrList=None, cont_names:OptStrList=None, classes:Collection=None, 
                 test_df=None, **kwargs)->DataBunch:
         "Create a `DataBunch` from `df` and `valid_idx` with `dep_var`."
-        cat_names = ifnone(cat_names, [])
+        cat_names = ifnone(cat_names, []).copy()
         cont_names = ifnone(cont_names, list(set(df)-set(cat_names)-{dep_var}))
         procs = listify(procs)
         src = (TabularList.from_df(df, path=path, cat_names=cat_names, cont_names=cont_names, procs=procs)
                            .split_by_idx(valid_idx)
-                           .label_from_df(cols=dep_var, classes=None))
+                           .label_from_df(cols=dep_var, classes=classes))
         if test_df is not None: src.add_test(TabularList.from_df(test_df, cat_names=cat_names, cont_names=cont_names,
                                                                  processor = src.train.x.processor))
         return src.databunch(**kwargs)
@@ -134,9 +134,11 @@ class TabularList(ItemList):
         items = [xs[0].names + ['target']]
         for i, (x,y) in enumerate(zip(xs,ys)):
             res = []
-            for c, n in zip(x.cats, x.names[:len(x.cats)]):
+            cats = x.cats if len(x.cats.size()) > 0 else []
+            conts = x.conts if len(x.conts.size()) > 0 else []
+            for c, n in zip(cats, x.names[:len(cats)]):
                 res.append(str(x.classes[n][c]))
-            res += [f'{c:.4f}' for c in x.conts] + [str(y)]
+            res += [f'{c:.4f}' for c in conts] + [str(y)]
             items.append(res)
         display(HTML(text2html_table(items, [10] * len(items[0]))))
 
@@ -146,9 +148,11 @@ class TabularList(ItemList):
         items = [xs[0].names + ['target', 'prediction']]
         for i, (x,y,z) in enumerate(zip(xs,ys,zs)):
             res = []
-            for c, n in zip(x.cats, x.names[:len(x.cats)]):
+            cats = x.cats if len(x.cats.size()) > 0 else []
+            conts = x.conts if len(x.conts.size()) > 0 else []
+            for c, n in zip(cats, x.names[:len(cats)]):
                 res.append(str(x.classes[n][c]))
-            res += [f'{c:.4f}' for c in x.conts] + [str(y),str(z)]
+            res += [f'{c:.4f}' for c in conts] + [str(y),str(z)]
             items.append(res)
         display(HTML(text2html_table(items, [10] * len(items[0]))))
 
